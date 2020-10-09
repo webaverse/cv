@@ -529,7 +529,7 @@ function GenerateField(field, width, height, depth, transparent) {
         const material = new THREE.MeshBasicMaterial({
           map: texture,
           side: THREE.DoubleSide,
-          transparent: true,
+          // transparent: true,
         });
         const mesh = new THREE.Mesh(geometry, material);
         mesh.frustumCulled = false;
@@ -572,7 +572,7 @@ function GenerateField(field, width, height, depth, transparent) {
           const material = new THREE.MeshBasicMaterial({
             map: texture,
             side: THREE.DoubleSide,
-            transparent: true,
+            // transparent: true,
           });
           const mesh = new THREE.Mesh(geometry, material);
           mesh.frustumCulled = false;
