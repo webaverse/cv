@@ -418,7 +418,7 @@ function GenerateField(field, width, height, depth, transparent) {
   const {id, hash} = parcel;
   console.log('got parcel', parcel);
   const content = await _getContent(id, hash);
-  const {voxels, palette, x1, x2, y1, y2, z1, z2} = content;
+  const {voxels, palette, tileset, x1, x2, y1, y2, z1, z2} = content;
   const w = x2 - x1;
   const h = y2 - y1;
   const d = z2 - z1;
@@ -458,14 +458,14 @@ function GenerateField(field, width, height, depth, transparent) {
   // orbitControls.target.copy(camera.position).add(new THREE.Vector3(0, camera.position.y, -3).applyQuaternion(camera.quaternion));
   orbitControls.update();
 
-  console.log('got content', content, w, h, d, w*h*d, field);
+  console.log('got content', content, w, h, d, w*h*d);
   const solidGeometry = GenerateField(field, w, h, d, false);
   const transparentGeometry = GenerateField(field, w, h, d, true);
   console.log('got solid', {solidGeometry, transparentGeometry});
 
   const img = new Image();
   img.crossOrigin = 'Anonymous';
-  img.src = 'https://https-cdn-cryptovoxels-com.proxy.exokit.org/uploads/atlas-1570893478841.png';
+  img.src = `https://https-cdn-cryptovoxels-com.proxy.exokit.org${tileset}`;
   img.onload = () => {
     texture.needsUpdate = true;
   };
