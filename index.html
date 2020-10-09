@@ -405,7 +405,7 @@ function GenerateField(field, width, height, depth, transparent) {
       }
   }
   for (let i = 0; i < vertexIndex; i += 3) {
-    newVertices[i] = - newVertices[i];
+    newVertices[i] = -newVertices[i];
   }
   for (let i = 0; i < indexIndex; i += 3) {
     const a = indices[i+1];
@@ -450,7 +450,7 @@ function GenerateField(field, width, height, depth, transparent) {
   window.scene = scene;
 
   const camera = new THREE.PerspectiveCamera(90, window.innerWidth/window.innerHeight, 0.1, 300);
-  camera.position.set(0, 10, -10);
+  camera.position.set(0, 10, 10);
   camera.lookAt(new THREE.Vector3());
 
   const ambientLight = new THREE.AmbientLight(0x808080);
@@ -508,6 +508,44 @@ function GenerateField(field, width, height, depth, transparent) {
   for (const feature of features) {
     const {type} = feature;
     switch (type) {
+      case 'image': {
+        const {url, position, rotation, scale} = feature;
+        const u = new URL(url);
+        u.host = u.protocol.replace(/:/g, '-') + u.host.replace(/\./g, '-') + '.proxy.exokit.org';
+        // console.log('got u', u.href);
+        const img = new Image();
+        const texture = new THREE.Texture(img);
+        await new Promise((accept, reject) => {
+          img.onload = accept;
+          img.onerror = err => {
+            console.warn(u, image_url, err);
+            reject(err);
+          };
+          img.crossOrigin = 'Anonymous';
+          img.src = u.href;
+        });
+        texture.needsUpdate = true;
+        const geometry = new THREE.PlaneBufferGeometry();
+        const material = new THREE.MeshBasicMaterial({
+          map: texture,
+          side: THREE.DoubleSide,
+          transparent: true,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.frustumCulled = false;
+        mesh.position.fromArray(position);
+        mesh.position.x *= -1;
+        mesh.position.multiplyScalar(2);
+        mesh.position.x -= w - 0.5;
+        mesh.position.y += 0.5;
+        mesh.position.z += d - 0.5;
+        console.log('pos x 1', url, position, mesh);
+        mesh.rotation.order = 'YXZ';
+        mesh.rotation.fromArray(rotation);
+        mesh.scale.fromArray(scale);
+        scene.add(mesh);
+        break;
+      }
       case 'nft-image': {
         const {url, position, rotation, scale} = feature;
         const match = url.match(/https:\/\/opensea\.io\/assets\/([^\/]+)\/([0-9]+)$/);
@@ -530,14 +568,21 @@ function GenerateField(field, width, height, depth, transparent) {
             img.src = image_url;
           });
           texture.needsUpdate = true;
-          const geometry = new THREE.PlaneBufferGeometry();
+          const geometry = new THREE.PlaneBufferGeometry(2, 2);
           const material = new THREE.MeshBasicMaterial({
             map: texture,
             side: THREE.DoubleSide,
+            transparent: true,
           });
           const mesh = new THREE.Mesh(geometry, material);
           mesh.frustumCulled = false;
           mesh.position.fromArray(position);
+          mesh.position.x *= -1;
+          mesh.position.multiplyScalar(2);
+          mesh.position.x -= w - 0.5;
+          mesh.position.y += 0.5;
+          mesh.position.z += d - 0.5;
+          console.log('pos x 2', url, position, mesh);
           mesh.rotation.order = 'YXZ';
           mesh.rotation.fromArray(rotation);
           mesh.scale.fromArray(scale);
@@ -552,9 +597,14 @@ function GenerateField(field, width, height, depth, transparent) {
         // console.log('got u', u.href);
         const model = await _loadVox(u.href);
         model.position.fromArray(position);
+        model.position.x *= -1;
+        model.position.multiplyScalar(2);
+        model.position.x -= w - 0.5;
+        model.position.y += 0.5;
+        model.position.z += d - 0.5;
         model.rotation.order = 'YXZ';
         model.rotation.fromArray(rotation);
-        model.scale.fromArray(scale).multiplyScalar(0.1);
+        model.scale.fromArray(scale).multiplyScalar(0.05);
         scene.add(model);
         break;
       }
