@@ -418,7 +418,7 @@ function GenerateField(field, width, height, depth, transparent) {
   const {id, hash} = parcel;
   console.log('got parcel', parcel);
   const content = await _getContent(id, hash);
-  const {voxels, palette, tileset, x1, x2, y1, y2, z1, z2} = content;
+  const {voxels, palette, tileset, features, x1, x2, y1, y2, z1, z2} = content;
   const w = x2 - x1;
   const h = y2 - y1;
   const d = z2 - z1;
@@ -501,10 +501,10 @@ function GenerateField(field, width, height, depth, transparent) {
 
   console.log('rendering...');
 
-renderer.setAnimationLoop(() => {
-  orbitControls.update();
-  renderer.render(scene, camera);
-});
+  renderer.setAnimationLoop(() => {
+    orbitControls.update();
+    renderer.render(scene, camera);
+  });
 })();
 </script>
 </body>
