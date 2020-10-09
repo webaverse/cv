@@ -554,7 +554,7 @@ function GenerateField(field, width, height, depth, transparent) {
         model.position.fromArray(position);
         model.rotation.order = 'YXZ';
         model.rotation.fromArray(rotation);
-        model.scale.fromArray(scale);
+        model.scale.fromArray(scale).multiplyScalar(0.1);
         scene.add(model);
         break;
       }
