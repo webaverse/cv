@@ -18,261 +18,475 @@ canvas {
 </style>
 </head>
 <body>
+<script src="./pako.js"></script>
+<script src="./pako_inflate.js"></script>
 <script type=module>
 import * as THREE from 'https://app.webaverse.com/three.module.js';
 import {GLTFLoader} from 'https://app.webaverse.com/GLTFLoader.js';
+// import {VOXLoader} from 'https://app.webaverse.com/VOXLoader.js';
 import {OrbitControls} from 'https://app.webaverse.com/OrbitControls.js';
-import {getBasisTransform, axesToAsciiImage, stringToAxes} from './basis.js';
+// import {getBasisTransform, axesToAsciiImage, stringToAxes} from './basis.js';
 
-const inversionMatrix = new THREE.Matrix4();
-const unityTransform = getBasisTransform('-X+Y+Z', '+X+Y+Z', inversionMatrix);
-// console.log('inversion', inversionMatrix);
-// const inversionMatrix = new THREE.Matrix4().fromArray([-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+// const inversionMatrix = new THREE.Matrix4();
+// const unityTransform = getBasisTransform('-X+Y+Z', '+X+Y+Z', inversionMatrix);
 
-const _getCoord = async (x, z) => {
-  const res = await fetch('https://peer-ec1.decentraland.org/content/entities/scene?pointer=' + [x,z].join(','));
+function convertDataURIToBinary(base64) {
+  var raw = window.atob(base64);
+  var rawLength = raw.length;
+  var array = new Uint8Array(new ArrayBuffer(rawLength));
+
+  for (let i = 0; i < rawLength; i++) {
+    array[i] = raw.charCodeAt(i);
+  }
+  return array;
+}
+
+const _getParcel = async (x, z) => {
+  const nonce = 30*Math.floor(Date.now()/1e3/30);
+  
+  console.log('got nonce', `https://https-js-cryptovoxels-com.proxy.exokit.org/cache/${nonce}/parcels.json`);
+  const res = await fetch(`https://https-js-cryptovoxels-com.proxy.exokit.org/cache/${nonce}/parcels.json`);
   const j = await res.json();
-  return j[0];
+  const {parcels} = j;
+  const parcel = parcels.find(parcel => {
+    return x >= parcel.x1 && x < parcel.x2 && z >= parcel.z1 && z < parcel.z2;
+  });
+  return parcel;
+};
+const _getContent = async (id, hash) => {
+  const res = await fetch(`https://https-js-cryptovoxels-com.proxy.exokit.org/grid/parcels/${id}/at/${hash}`);
+  const j = await res.json();
+  const {parcel} = j;
+  return parcel;
 };
 
-(async () => {
-  const coord = await _getCoord(21, 34);
-  const {metadata: {main}, content} = coord;
-  console.log('loaded', coord);
-  const mainFile = content.find(f => f.file === main);
-  const {hash} = mainFile;
+function GetVoxel(field, width, height, depth, x, y, z) {
+    if (x < 0 || y < 0 || z < 0 || x >= width * 2 || y >= height * 2 || z >= depth * 2)
+    {
+        return 0;
+    }
+    else
+    {
+        const index = z + y*(depth*2) + x*(depth*2)*(height*2);
+        return field[index];
+    }
+}
+function AddUvs(index, transparent, uvs, uvIndex)
+{
+    if (transparent)
+    {
+        uvs[uvIndex++] = 0;
+        uvs[uvIndex++] = 0;
+        uvs[uvIndex++] = 1;
+        uvs[uvIndex++] = 0;
+        uvs[uvIndex++] = 0;
+        uvs[uvIndex++] = 1;
+        uvs[uvIndex++] = 1;
+        uvs[uvIndex++] = 1;
 
-  const worker = new Worker('./worker.js?hash=' + hash);
-  worker.onmessage = async e => {
-    const j = JSON.parse(e.data);
-    worker.terminate();
-
-    const renderer = new THREE.WebGLRenderer();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    document.body.appendChild(renderer.domElement);
-    window.addEventListener('resize', e => {
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      camera.aspect = window.innerWidth/window.innerHeight;
-      camera.updateProjectionMatrix();
-    });
-
-    const scene = new THREE.Scene();
-    scene.matrix.copy(inversionMatrix)
-      .decompose(scene.position, scene.quaternion, scene.scale);
-    window.scene = scene;
-
-    const camera = new THREE.PerspectiveCamera(90, window.innerWidth/window.innerHeight, 0.1, 300);
-    camera.position.set(0, 10, -10);
-    camera.lookAt(new THREE.Vector3());
-
-    const ambientLight = new THREE.AmbientLight(0x808080);
-    scene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(0xFFFFFF, 1);
-    directionalLight.position.set(1, 2, 3);
-    scene.add(directionalLight);
-
-    const orbitControls = new OrbitControls(camera, renderer.domElement);
-    orbitControls.screenSpacePanning = true;
-    orbitControls.enableMiddleZoom = false;
-    // orbitControls.target.copy(camera.position).add(new THREE.Vector3(0, camera.position.y, -3).applyQuaternion(camera.quaternion));
-    orbitControls.update();
-
-    const manager = new THREE.LoadingManager();
-    manager.setURLModifier(url => {
-      // const u = (() => {
-        if (url.includes('https://peer-ec1.decentraland.org/lambdas/contentv2/contents/Q')) {
-          return url;
-        } else {
-          const u = 'unity_assets/' + url.slice('https://peer-ec1.decentraland.org/lambdas/contentv2/contents/'.length);
-          const file = content.find(f => f.file === u);
-          if (file) {
-            const {hash} = file;
-            return 'https://peer-ec1.decentraland.org/lambdas/contentv2/contents/' + hash;
-          } else {
-            console.warn('content not found', url);
-            return url;
-          }
-        }
-      // })();
-      // console.log('load', [url, u]);
-      // return u;
-    });
-    const _loadGltf = async u => {
-      let o = await new Promise((accept, reject) => {
-        new GLTFLoader(manager).load(u, accept, function onprogress() {}, reject);
-      });
-      // o = o.scene;
-      return o;
-    };
-
-    const entities = {};
-    const components = {};
-
-    for (const entry of j.result) {
-      const {method, args} = entry;
-      console.log('got method', method, args);
-      switch (method) {
-        case 'addEntity': {
-          const [id] = args;
-          const entity = new THREE.Object3D();
-          entity.components = [];
-          if (id === '0') {
-            scene.add(entity);
-          }
-          entities[id] = entity;
-          break;
-        }
-        case 'setParent': {
-          const [id, parentId] = args;
-          const entity = entities[id];
-          const parent = entities[parentId];
-          parent.add(entity);
-          break;
-        }
-        case 'updateEntityComponent': {
-          const [id, template, id2, s] = args;
-          const entity = entities[id];
-          switch (template) {
-            case 'engine.transform': {
-              // if (id === 'Eq') continue;
-              const j = JSON.parse(s);
-              const {position, rotation, scale} = j;
-              // console.log('got transform', j);
-              /* const {y, z} = position;
-              position.z = y;
-              position.y = z; */
-              // position.x *= -1;
-              // position.z *= -1;
-              // position.y *= -1;
-              // scale.y *= -1;
-              entity.position.copy(position);
-              /* if (position.y < 0) {
-                position.y *= -1;
-                scale.y *= -1;
-                // console.log('less than', id);
-              } */
-              entity.quaternion.copy(rotation)
-                // .conjugate()
-                // .normalize()
-                // .multiply(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1)));
-              // convert Quaternion from Left-handed coordinate system to Right-handed
-              /* {
-                var q = new THREE.Quaternion(-rotation.x, rotation.y, rotation.z, -rotation.w);
-
-                var v = new THREE.Euler().setFromQuaternion(q);
-
-                v.y += Math.PI; // Y is 180 degrees off
-
-                v.z *= -1; // flip Z
-
-                entity.quaternion.set(rotation.z, rotation.w, rotation.x, rotation.y);
-              } */
-              entity.scale.copy(scale);
-              // entity.updateMatrixWorld();
-              entity.matrix
-                .compose(entity.position, entity.quaternion, entity.scale)
-                // .premultiply(inversionMatrix)
-                .decompose(entity.position, entity.quaternion, entity.scale);
-              break;
-            }
-            default: {
-              console.warn('unknown component template', template);
-              break;
-            }
-          }
-          break;
-        }
-        case 'componentCreated': {
-          const [id, template, id2] = args;
-          const component = {
-            template,
-          };
-          components[id] = component;
-          break;
-        }
-        case 'componentUpdated': {
-          const [id, s] = args;
-          const j = JSON.parse(s);
-          const component = components[id];
-          component.data = j;
-          break;
-        }
-        case 'attachEntityComponent': {
-          const [entityId, template, componentId] = args;
-          const entity = entities[entityId];
-          const component = components[componentId];
-          switch (template) {
-            case 'engine.shape': {
-              entity.components.push(component);
-              break;
-            }
-            default: {
-              console.warn('unknown component template', template);
-              break;
-            }
-          }
-          break;
-        }
-        default: {
-          console.warn('unknown method', method);
-          break;
-        }
-      }
+        return uvIndex;
     }
 
-    for (const id in entities) {
-      const entity = entities[id];
-      /* if (entity.components.length === 0) {
-        entity.position.set(0, 0, 0);
-        entity.quaternion.set(0, 0, 0, 1);
-        entity.scale.set(1, 1, 1);
-      } */
-      for (const component of entity.components) {
-        const {data} = component;
-        const {src, visible} = data;
-        if (src && visible) {
-          if (/\.(?:glb|gltf)$/.test(src)) {
-            const srcFile = content.find(f => f.file === src);
-            if (srcFile) {
-              const {hash} = srcFile;
-              try {
-                let model = await _loadGltf('https://peer-ec1.decentraland.org/lambdas/contentv2/contents/' + hash);
-                console.log('got model', id, model);
-                // model.rotation.z += Math.PI;
-                model = model.scene;
-                // const box = new THREE.Box3().setFromObject(model);
-                // model.position.sub(box.getCenter(new THREE.Vector3()));
-                model.matrix.copy(inversionMatrix)
-                  .decompose(model.position, model.quaternion, model.scale);
-                model.traverse(o => {
-                  if (o.isMesh && /_collider/.test(o.name)) {
-                    o.visible = false;
+    const s = 1.0 / 16 / 128 * 128;
+
+    // long textureIndex = index - (1 << 15);
+    // const textureIndex = index % 16;
+    const textureIndex = index & 15;
+
+    // if (textureIndex >= 32) {
+    //   // inverted
+    //   textureIndex = (textureIndex % 32) * 2 + 1
+    // } else {
+    //   textureIndex = (textureIndex % 32) * 2
+    // }
+
+    let x = 1.0 / 4 * ((textureIndex % 4) + 0.5);
+    let y = 1.0 / 4 * (Math.floor(textureIndex / 4.0) + 0.5);
+
+    y = 1.0 - y;
+
+    uvs[uvIndex++] = x - s;
+    uvs[uvIndex++] = y - s;
+    uvs[uvIndex++] = x + s;
+    uvs[uvIndex++] = y - s;
+    uvs[uvIndex++] = x - s;
+    uvs[uvIndex++] = y + s;
+    uvs[uvIndex++] = x + s;
+    uvs[uvIndex++] = y + s;
+
+    return uvIndex;
+}
+const _colorTable = [
+    new THREE.Color(0xffffff),
+    new THREE.Color(0x888888),
+    new THREE.Color(0x000000),
+    new THREE.Color(0xff71ce),
+    new THREE.Color(0x01cdfe),
+    new THREE.Color(0x05ffa1),
+    new THREE.Color(0xb967ff),
+    new THREE.Color(0xfffb96),
+];
+const white = new THREE.Color(0xFFFFFF);
+const red = new THREE.Color(0xFF0000);
+
+function UIntToColor(color)
+{
+    //string binary = Convert.ToString(color, 2);
+    //binary = binary.Remove(binary.Length - 2 - 1, 2);
+    //uint newValue = Convert.ToUInt32(binary, 2);
+    //uint c = color;// - (byte) color;//  (byte)(color & ~(1 << 4));
+    // string debug = "";
+    if (color >= 32768)
+    {
+        color -= 32768;
+        // debug += "big ";
+    }
+
+    if (color === 0)
+    {
+        return white;
+    }
+
+    if (color > 32)
+    {
+        //uint colorIndex = (uint)Mathf.Floor(color / 32.0f);
+        //Debug.Log(color-32);
+        
+        const index = Math.floor(color / 32);
+        if (index >= _colorTable.length) {
+            return red;
+        }
+        return _colorTable[index];
+    }
+    return white;
+
+}
+
+function IsTransparent(index) {
+    return index <= 2;
+}
+function IsGeometry(index, transparent) {
+    return transparent ? index == 2 : index > 2;
+}
+function GenerateField(field, width, height, depth, transparent) { 
+  const newVertices = new Float32Array(1024 * 1024);
+  const newUV = new Float32Array(1024 * 1024);
+  const indices = new Uint32Array(1024 * 1024);
+  const newColor = new Float32Array(1024 * 1024);
+  
+  let vertexIndex = 0;
+  let uvIndex = 0;
+  let indexIndex = 0;
+  let colorIndex = 0;
+
+  for (let x = -1; x < width * 2; x++)
+  {
+      for (let y = -1; y < height * 2; y++)
+      {
+          for (let z = -1; z < depth * 2; z++)
+          {
+              const i = GetVoxel(field, width, height, depth, x, y, z);
+              const nX = GetVoxel(field, width, height, depth, x + 1, y, z);
+              const nY = GetVoxel(field, width, height, depth, x, y + 1, z);
+              const nZ = GetVoxel(field, width, height, depth, x, y, z + 1);
+
+              if (IsGeometry(i, transparent) !== IsGeometry(nX, transparent))
+              {
+                  const v = vertexIndex/3;
+
+                  /* newVertices.Add(new Vector3(x + 1, y + 1, z));
+                  newVertices.Add(new Vector3(x + 1, y + 1, z + 1));
+                  newVertices.Add(new Vector3(x + 1, y, z));
+                  newVertices.Add(new Vector3(x + 1, y, z + 1)); */
+
+                  newVertices[vertexIndex++] = x + 1;
+                  newVertices[vertexIndex++] = y + 1;
+                  newVertices[vertexIndex++] = z;
+                  newVertices[vertexIndex++] = x + 1;
+                  newVertices[vertexIndex++] = y + 1;
+                  newVertices[vertexIndex++] = z + 1;
+                  newVertices[vertexIndex++] = x + 1;
+                  newVertices[vertexIndex++] = y;
+                  newVertices[vertexIndex++] = z;
+                  newVertices[vertexIndex++] = x + 1;
+                  newVertices[vertexIndex++] = y;
+                  newVertices[vertexIndex++] = z + 1;
+                  
+                  if (i > nX)
+                  {
+                      indices[indexIndex++] = v + 0;
+                      indices[indexIndex++] = v + 1;
+                      indices[indexIndex++] = v + 2;
+
+                      indices[indexIndex++] = v + 1;
+                      indices[indexIndex++] = v + 3;
+                      indices[indexIndex++] = v + 2;
+                      
+                      uvIndex = AddUvs(i, transparent, newUV, uvIndex);
+
+                      const c = UIntToColor(i);
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
                   }
-                });
-                entity.add(model);
-              } catch (err) {
-                console.warn(err);
+                  else
+                  {
+                      indices[indexIndex++] = v + 2;
+                      indices[indexIndex++] = v + 1;
+                      indices[indexIndex++] = v + 0;
+
+                      indices[indexIndex++] = v + 2;
+                      indices[indexIndex++] = v + 3;
+                      indices[indexIndex++] = v + 1;
+
+                      uvIndex = AddUvs(nX, transparent, newUV, uvIndex);
+                      
+                      const c = UIntToColor(nX);
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                  }
               }
-            } else {
-              console.warn('content file not found', srcFile);
-            }
-          } else {
-            console.warn('illegal engine file', src);
+
+              if (IsGeometry(i, transparent) !== IsGeometry(nY, transparent))
+              {
+                  const v = vertexIndex/3;
+                  
+                  /* newVertices.Add(new Vector3(x, y + 1, z));
+                  newVertices.Add(new Vector3(x + 1, y + 1, z));
+                  newVertices.Add(new Vector3(x, y + 1, z + 1));
+                  newVertices.Add(new Vector3(x + 1, y + 1, z + 1)); */
+                  
+                  newVertices[vertexIndex++] = x;
+                  newVertices[vertexIndex++] = y + 1;
+                  newVertices[vertexIndex++] = z;
+                  newVertices[vertexIndex++] = x + 1;
+                  newVertices[vertexIndex++] = y + 1;
+                  newVertices[vertexIndex++] = z;
+                  newVertices[vertexIndex++] = x;
+                  newVertices[vertexIndex++] = y + 1;
+                  newVertices[vertexIndex++] = z + 1;
+                  newVertices[vertexIndex++] = x + 1;
+                  newVertices[vertexIndex++] = y + 1;
+                  newVertices[vertexIndex++] = z + 1;
+
+                  if (i < nY)
+                  {
+                      indices[indexIndex++] = v + 0;
+                      indices[indexIndex++] = v + 1;
+                      indices[indexIndex++] = v + 2;
+
+                      indices[indexIndex++] = v + 1;
+                      indices[indexIndex++] = v + 3;
+                      indices[indexIndex++] = v + 2;
+
+                      uvIndex = AddUvs(nY, transparent, newUV, uvIndex);
+                      
+                      const c = UIntToColor(nY);
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                  }
+                  else
+                  {
+                      indices[indexIndex++] = v + 2;
+                      indices[indexIndex++] = v + 1;
+                      indices[indexIndex++] = v + 0;
+
+                      indices[indexIndex++] = v + 2;
+                      indices[indexIndex++] = v + 3;
+                      indices[indexIndex++] = v + 1;
+
+                      uvIndex = AddUvs(i, transparent, newUV, uvIndex);
+                      
+                      const c = UIntToColor(i);
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                  }
+
+              }
+
+              if (IsGeometry(i, transparent) !== IsGeometry(nZ, transparent))
+              {
+                  const v = vertexIndex/3;
+
+                  /* newVertices.Add(new Vector3(x, y, z + 1));
+                  newVertices.Add(new Vector3(x + 1, y, z + 1));
+                  newVertices.Add(new Vector3(x, y + 1, z + 1));
+                  newVertices.Add(new Vector3(x + 1, y + 1, z + 1)); */
+
+                  newVertices[vertexIndex++] = x;
+                  newVertices[vertexIndex++] = y;
+                  newVertices[vertexIndex++] = z + 1;
+                  newVertices[vertexIndex++] = x + 1;
+                  newVertices[vertexIndex++] = y;
+                  newVertices[vertexIndex++] = z + 1;
+                  newVertices[vertexIndex++] = x;
+                  newVertices[vertexIndex++] = y + 1;
+                  newVertices[vertexIndex++] = z + 1;
+                  newVertices[vertexIndex++] = x + 1;
+                  newVertices[vertexIndex++] = y + 1;
+                  newVertices[vertexIndex++] = z + 1;
+
+                  if (i > nZ)
+                  {
+                      indices[indexIndex++] = v + 0;
+                      indices[indexIndex++] = v + 1;
+                      indices[indexIndex++] = v + 2;
+
+                      indices[indexIndex++] = v + 1;
+                      indices[indexIndex++] = v + 3;
+                      indices[indexIndex++] = v + 2;
+
+                      uvIndex = AddUvs(i, transparent, newUV, uvIndex);
+                      
+                      const c = UIntToColor(i);
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                  }
+                  else
+                  {
+                      indices[indexIndex++] = v + 2;
+                      indices[indexIndex++] = v + 1;
+                      indices[indexIndex++] = v + 0;
+
+                      indices[indexIndex++] = v + 2;
+                      indices[indexIndex++] = v + 3;
+                      indices[indexIndex++] = v + 1;
+
+                      uvIndex = AddUvs(nZ, transparent, newUV, uvIndex);
+
+                      const c = UIntToColor(nZ);
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                      c.toArray(newColor, colorIndex);
+                      colorIndex += 3;
+                  }
+              }
           }
-        } else {
-          console.warn('shape with no src', entity, component);
-        }
       }
-    }
+  }
+  for (let i = 0; i < vertexIndex; i += 3) {
+    newVertices[i] = - newVertices[i];
+  }
+  for (let i = 0; i < indexIndex; i += 3) {
+    const a = indices[i+1];
+    indices[i+1] = indices[i];
+    indices[i] = a;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(newVertices.subarray(0, vertexIndex), 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(newUV.subarray(0, uvIndex), 2));
+  geometry.setAttribute('color', new THREE.BufferAttribute(newColor.subarray(0, colorIndex), 3));
+  geometry.setIndex(new THREE.BufferAttribute(indices.subarray(0, indexIndex), 1));
+  return geometry;
+}
 
-    console.log('rendering...');
+(async () => {
+  const parcel = await _getParcel(-4, -25);
+  const {id, hash} = parcel;
+  console.log('got parcel', parcel);
+  const content = await _getContent(id, hash);
+  const {voxels, x1, x2, y1, y2, z1, z2} = content;
+  const w = x2 - x1;
+  const h = y2 - y1;
+  const d = z2 - z1;
+  // const field = new Int16Array(convertDataURIToBinary(voxels).buffer);
 
-    renderer.setAnimationLoop(() => {
-      orbitControls.update();
-      renderer.render(scene, camera);
+  const field = new Uint16Array(pako.inflate(convertDataURIToBinary(voxels)).buffer);
+
+  const renderer = new THREE.WebGLRenderer();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  document.body.appendChild(renderer.domElement);
+  window.addEventListener('resize', e => {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+  });
+
+  const scene = new THREE.Scene();
+  window.scene = scene;
+
+  const camera = new THREE.PerspectiveCamera(90, window.innerWidth/window.innerHeight, 0.1, 300);
+  camera.position.set(0, 10, -10);
+  camera.lookAt(new THREE.Vector3());
+
+  const ambientLight = new THREE.AmbientLight(0x808080);
+  scene.add(ambientLight);
+  const directionalLight = new THREE.DirectionalLight(0xFFFFFF, 1);
+  directionalLight.position.set(1, 2, 3);
+  scene.add(directionalLight);
+
+  const orbitControls = new OrbitControls(camera, renderer.domElement);
+  orbitControls.screenSpacePanning = true;
+  orbitControls.enableMiddleZoom = false;
+  // orbitControls.target.copy(camera.position).add(new THREE.Vector3(0, camera.position.y, -3).applyQuaternion(camera.quaternion));
+  orbitControls.update();
+
+  console.log('got content', content, w, h, d, w*h*d, field);
+  const solidGeometry = GenerateField(field, w, h, d, false);
+  const transparentGeometry = GenerateField(field, w, h, d, true);
+  console.log('got solid', {solidGeometry, transparentGeometry});
+
+  {
+    solidGeometry.computeVertexNormals();
+    const material = new THREE.MeshPhongMaterial({
+      color: 0xFF0000,
     });
-  };
+    const mesh = new THREE.Mesh(solidGeometry, material);
+    mesh.frustumCulled = false;
+    scene.add(mesh);
+  }
+  {
+    transparentGeometry.computeVertexNormals();
+    const material = new THREE.MeshPhongMaterial({
+      color: 0xFFFFFF,
+      transparent: true,
+      opacity: 0.7,
+    });
+    const mesh = new THREE.Mesh(transparentGeometry, material);
+    mesh.frustumCulled = false;
+    scene.add(mesh);
+  }
+
+  console.log('rendering...');
+
+renderer.setAnimationLoop(() => {
+  orbitControls.update();
+  renderer.render(scene, camera);
+});
 })();
 </script>
 </body>
