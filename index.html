@@ -23,7 +23,7 @@ canvas {
 <script type=module>
 import * as THREE from 'https://app.webaverse.com/three.module.js';
 import {GLTFLoader} from 'https://app.webaverse.com/GLTFLoader.js';
-// import {VOXLoader} from 'https://app.webaverse.com/VOXLoader.js';
+import {VOXLoader} from 'https://app.webaverse.com/VOXLoader.js';
 import {OrbitControls} from 'https://app.webaverse.com/OrbitControls.js';
 // import {getBasisTransform, axesToAsciiImage, stringToAxes} from './basis.js';
 
@@ -58,6 +58,13 @@ const _getContent = async (id, hash) => {
   const j = await res.json();
   const {parcel} = j;
   return parcel;
+};
+const _loadVox = async u => {
+  let o = await new Promise((accept, reject) => {
+    new VOXLoader().load(u, accept, function onprogress() {}, reject);
+  });
+  // o = o.scene;
+  return o;
 };
 
 function GetVoxel(field, width, height, depth, x, y, z) {
@@ -497,6 +504,61 @@ function GenerateField(field, width, height, depth, transparent) {
     const mesh = new THREE.Mesh(transparentGeometry, material);
     mesh.frustumCulled = false;
     scene.add(mesh);
+  }
+  for (const feature of features) {
+    const {type} = feature;
+    switch (type) {
+      case 'nft-image': {
+        const {url, position, rotation, scale} = feature;
+        const match = url.match(/https:\/\/opensea\.io\/assets\/([^\/]+)\/([0-9]+)$/);
+        if (match) {
+          const contract = match[1];
+          const token = match[2];
+          const u = `https://https-img-cryptovoxels-com.proxy.exokit.org/node/opensea?contract=${contract}&token=${token}&force_update=0`;
+          const res = await fetch(u);
+          const j = await res.json();
+          const {image_url} = j;
+          const img = new Image();
+          const texture = new THREE.Texture(img);
+          await new Promise((accept, reject) => {
+            img.onload = accept;
+            img.onerror = err => {
+              console.warn(u, image_url, err);
+              reject(err);
+            };
+            img.crossOrigin = 'Anonymous';
+            img.src = image_url;
+          });
+          texture.needsUpdate = true;
+          const geometry = new THREE.PlaneBufferGeometry();
+          const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            side: THREE.DoubleSide,
+          });
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.frustumCulled = false;
+          mesh.position.fromArray(position);
+          mesh.rotation.order = 'YXZ';
+          mesh.rotation.fromArray(rotation);
+          mesh.scale.fromArray(scale);
+          scene.add(mesh);
+        }
+        break;
+      }
+      case 'vox-model': {
+        const {url, position, rotation, scale, flipX} = feature;
+        const u = new URL(url);
+        u.host = u.protocol.replace(/:/g, '-') + u.host.replace(/\./g, '-') + '.proxy.exokit.org';
+        // console.log('got u', u.href);
+        const model = await _loadVox(u.href);
+        model.position.fromArray(position);
+        model.rotation.order = 'YXZ';
+        model.rotation.fromArray(rotation);
+        model.scale.fromArray(scale);
+        scene.add(model);
+        break;
+      }
+    }
   }
 
   console.log('rendering...');
