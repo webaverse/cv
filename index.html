@@ -86,7 +86,7 @@ const _getTextureMaterialCached = (() => {
   return u => {
     let entry = cache[u];
     if (!entry) {
-      entry = await _getTextureMaterial(u);
+      entry = _getTextureMaterial(u);
       cache[u] = entry;
     }
     return entry;
