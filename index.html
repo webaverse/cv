@@ -97,7 +97,24 @@ const _loadVox = async u => {
   let o = await new Promise((accept, reject) => {
     new VOXLoader().load(u, accept, function onprogress() {}, reject);
   });
-  // o = o.scene;
+  const {geometry} = o;
+  const positions = geometry.attributes.position.array;
+  const normals = geometry.attributes.normal.array;
+  // const indices = geometry.index.array;
+  for (let i = 0; i < positions.length; i += 3) {
+    positions[i] = -positions[i];
+    
+    normals[i] *= -1;
+    normals[i+1] *= -1;
+    normals[i+2] *= -1;
+  }
+  const indices = new Uint32Array(positions.length/3);
+  for (let i = 0; i < indices.length; i += 3) {
+    indices[i] = i;
+    indices[i+1] = i+2;
+    indices[i+2] = i+1;
+  }
+  geometry.setIndex(new THREE.BufferAttribute(indices, 1));
   return o;
 };
 const _loadVoxCached = (() => {
@@ -619,7 +636,9 @@ function GenerateField(field, width, height, depth, transparent) {
         model.position.z += d - 0.5;
         model.rotation.order = 'YXZ';
         model.rotation.fromArray(rotation);
+        model.rotation.y *= -1;
         model.scale.fromArray(scale).multiplyScalar(0.04);
+        // model.scale.z *= -1;
         scene.add(model);
         break;
       }
