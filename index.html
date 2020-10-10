@@ -69,7 +69,7 @@ const _getTextureMaterial = u => {
     console.warn(err);
   };
   img.crossOrigin = 'Anonymous';
-  img.src = image_url;
+  img.src = u;
   const texture = new THREE.Texture(img);
   const material = new THREE.MeshBasicMaterial({
     map: texture,
