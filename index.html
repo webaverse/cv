@@ -66,6 +66,17 @@ const _loadVox = async u => {
   // o = o.scene;
   return o;
 };
+const _loadVoxCached = (() => {
+  const cache = {};
+  return async u => {
+    let entry = cache[u];
+    if (!entry) {
+      entry = await _loadVox(u);
+      cache[u] = entry;
+    }
+    return entry.clone();
+  };
+})();
 
 function GetVoxel(field, width, height, depth, x, y, z) {
     if (x < 0 || y < 0 || z < 0 || x >= width * 2 || y >= height * 2 || z >= depth * 2)
@@ -601,7 +612,7 @@ function GenerateField(field, width, height, depth, transparent) {
         const u = new URL(url);
         u.host = u.protocol.replace(/:/g, '-') + u.host.replace(/\./g, '-') + '.proxy.exokit.org';
         // console.log('got u', u.href);
-        const model = await _loadVox(u.href);
+        const model = await _loadVoxCached(u.href);
         model.position.fromArray(position);
         model.position.x *= -1;
         model.position.multiplyScalar(2);
