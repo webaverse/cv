@@ -531,6 +531,9 @@ function GenerateField(field, width, height, depth, transparent) {
           side: THREE.DoubleSide,
           // transparent: true,
         });
+        material.polygonOffset = true;
+        material.polygonOffsetFactor = -1.0;
+        material.polygonOffsetUnits = -4.0;
         const mesh = new THREE.Mesh(geometry, material);
         mesh.frustumCulled = false;
         mesh.position.fromArray(position);
@@ -574,6 +577,9 @@ function GenerateField(field, width, height, depth, transparent) {
             side: THREE.DoubleSide,
             // transparent: true,
           });
+          material.polygonOffset = true;
+          material.polygonOffsetFactor = -1.0;
+          material.polygonOffsetUnits = -4.0;
           const mesh = new THREE.Mesh(geometry, material);
           mesh.frustumCulled = false;
           mesh.position.fromArray(position);
