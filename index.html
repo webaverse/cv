@@ -589,9 +589,6 @@ function GenerateField(field, width, height, depth, transparent) {
           const {image_url} = j;
           const geometry = imageGeometry;
           const material = _getTextureMaterialCached(image_url);
-          material.polygonOffset = true;
-          material.polygonOffsetFactor = -1.0;
-          material.polygonOffsetUnits = -4.0;
           const mesh = new THREE.Mesh(geometry, material);
           mesh.frustumCulled = false;
           mesh.position.fromArray(position);
