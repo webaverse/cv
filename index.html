@@ -702,6 +702,8 @@ const _getCoord = (x, z) => parcels.find(parcel);
               // console.log('pos x 1', url, position, mesh);
               mesh.rotation.order = 'YXZ';
               mesh.rotation.fromArray(rotation);
+              mesh.rotation.y *= -1;
+              mesh.rotation.z *= -1;
               mesh.scale.fromArray(scale);
               object.add(mesh);
               break;
@@ -729,6 +731,8 @@ const _getCoord = (x, z) => parcels.find(parcel);
                 // console.log('pos x 2', url, position, mesh);
                 mesh.rotation.order = 'YXZ';
                 mesh.rotation.fromArray(rotation);
+                mesh.rotation.y *= -1;
+                mesh.rotation.z *= -1;
                 mesh.scale.fromArray(scale);
                 object.add(mesh);
               }
