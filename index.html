@@ -680,43 +680,17 @@ const _getCoord = (x, z) => parcels.find(parcel);
       }
       for (const feature of features) {
         if (!live) return;
-      
-        const {type} = feature;
-        switch (type) {
-          case 'image': {
-            const {url, position, rotation, scale} = feature;
-            const u = new URL(url);
-            u.host = u.protocol.replace(/:/g, '-') + u.host.replace(/\./g, '-') + '.proxy.exokit.org';
-            // console.log('got u', u.href);
-            const geometry = imageGeometry;
-            const material = _getTextureMaterialCached(u.href);
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.frustumCulled = false;
-            mesh.position.fromArray(position);
-            mesh.position.x *= -1;
-            mesh.position.multiplyScalar(2);
-            mesh.position.x -= w - 0.5;
-            mesh.position.y += 0.5;
-            mesh.position.z += d - 0.5;
-            // console.log('pos x 1', url, position, mesh);
-            mesh.rotation.order = 'YXZ';
-            mesh.rotation.fromArray(rotation);
-            mesh.scale.fromArray(scale);
-            object.add(mesh);
-            break;
-          }
-          case 'nft-image': {
-            const {url, position, rotation, scale} = feature;
-            const match = url.match(/https:\/\/opensea\.io\/assets\/([^\/]+)\/([0-9]+)$/);
-            if (match) {
-              const contract = match[1];
-              const token = match[2];
-              const u = `https://https-img-cryptovoxels-com.proxy.exokit.org/node/opensea?contract=${contract}&token=${token}&force_update=0`;
-              const res = await fetch(u);
-              const j = await res.json();
-              const {image_url} = j;
+
+        try {
+          const {type} = feature;
+          switch (type) {
+            case 'image': {
+              const {url, position, rotation, scale} = feature;
+              const u = new URL(url);
+              u.host = u.protocol.replace(/:/g, '-') + u.host.replace(/\./g, '-') + '.proxy.exokit.org';
+              // console.log('got u', u.href);
               const geometry = imageGeometry;
-              const material = _getTextureMaterialCached(image_url);
+              const material = _getTextureMaterialCached(u.href);
               const mesh = new THREE.Mesh(geometry, material);
               mesh.frustumCulled = false;
               mesh.position.fromArray(position);
@@ -725,39 +699,69 @@ const _getCoord = (x, z) => parcels.find(parcel);
               mesh.position.x -= w - 0.5;
               mesh.position.y += 0.5;
               mesh.position.z += d - 0.5;
-              // console.log('pos x 2', url, position, mesh);
+              // console.log('pos x 1', url, position, mesh);
               mesh.rotation.order = 'YXZ';
               mesh.rotation.fromArray(rotation);
               mesh.scale.fromArray(scale);
               object.add(mesh);
+              break;
             }
-            break;
+            case 'nft-image': {
+              const {url, position, rotation, scale} = feature;
+              const match = url.match(/https:\/\/opensea\.io\/assets\/([^\/]+)\/([0-9]+)$/);
+              if (match) {
+                const contract = match[1];
+                const token = match[2];
+                const u = `https://https-img-cryptovoxels-com.proxy.exokit.org/node/opensea?contract=${contract}&token=${token}&force_update=0`;
+                const res = await fetch(u);
+                const j = await res.json();
+                const {image_url} = j;
+                const geometry = imageGeometry;
+                const material = _getTextureMaterialCached(image_url);
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.frustumCulled = false;
+                mesh.position.fromArray(position);
+                mesh.position.x *= -1;
+                mesh.position.multiplyScalar(2);
+                mesh.position.x -= w - 0.5;
+                mesh.position.y += 0.5;
+                mesh.position.z += d - 0.5;
+                // console.log('pos x 2', url, position, mesh);
+                mesh.rotation.order = 'YXZ';
+                mesh.rotation.fromArray(rotation);
+                mesh.scale.fromArray(scale);
+                object.add(mesh);
+              }
+              break;
+            }
+            case 'vox-model': {
+              const {url, position, rotation, scale, flipX} = feature;
+              // const u = new URL(url);
+              // u.host = u.protocol.replace(/:/g, '-') + u.host.replace(/\./g, '-') + '.proxy.exokit.org';
+              // const model = await _loadVoxCached(u.href);
+              const u = `https://https-cdn-cryptovoxels-com.proxy.exokit.org/node/vox?url=${encodeURI(url)}`;
+              const model = await _loadVoxCached(u);
+              console.log('got u', u.href, model, {w, h, d, position, rotation, scale});
+              model.position.fromArray(position);
+              model.position.x *= -1;
+              model.position.multiplyScalar(2);
+              model.position.x -= w - 0.5;
+              model.position.y += 0.5;
+              model.position.z += d - 0.5;
+              model.rotation.order = 'YXZ';
+              model.rotation.fromArray(rotation);
+              // model.rotation.x *= -1;
+              model.rotation.y *= -1;
+              model.rotation.z *= -1;
+              model.scale.fromArray(scale).multiplyScalar(0.04);
+              // model.scale.z *= -1;
+              model.frustumCulled = false;
+              object.add(model);
+              break;
+            }
           }
-          case 'vox-model': {
-            const {url, position, rotation, scale, flipX} = feature;
-            // const u = new URL(url);
-            // u.host = u.protocol.replace(/:/g, '-') + u.host.replace(/\./g, '-') + '.proxy.exokit.org';
-            // const model = await _loadVoxCached(u.href);
-            const u = `https://https-cdn-cryptovoxels-com.proxy.exokit.org/node/vox?url=${encodeURI(url)}`;
-            const model = await _loadVoxCached(u);
-            console.log('got u', u.href, model, {w, h, d, position, rotation, scale});
-            model.position.fromArray(position);
-            model.position.x *= -1;
-            model.position.multiplyScalar(2);
-            model.position.x -= w - 0.5;
-            model.position.y += 0.5;
-            model.position.z += d - 0.5;
-            model.rotation.order = 'YXZ';
-            model.rotation.fromArray(rotation);
-            // model.rotation.x *= -1;
-            model.rotation.y *= -1;
-            model.rotation.z *= -1;
-            model.scale.fromArray(scale).multiplyScalar(0.04);
-            // model.scale.z *= -1;
-            model.frustumCulled = false;
-            object.add(model);
-            break;
-          }
+        } catch (err) {
+          console.warn(err);
         }
       }
 
