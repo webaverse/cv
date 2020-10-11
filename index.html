@@ -96,11 +96,13 @@ const zoom = 8;
 const tileRange = 4;
 const centerTile = 128;
 const tilePixelWidth = 256;
-const tileVoxelWidth = 24;
+const numTiles = tileRange*2;
+const mapSize = 1000*2*(1 + 1/numTiles);
+// const tileVoxelWidth = mapSize/4/numTiles;
 const _getFloorTexture = async () => {
   const canvas = document.createElement('canvas');
-  canvas.width = (tileRange*2)*tilePixelWidth;
-  canvas.height = (tileRange*2)*tilePixelWidth;
+  canvas.width = numTiles*tilePixelWidth;
+  canvas.height = numTiles*tilePixelWidth;
   const ctx = canvas.getContext('2d');
   for (let dx = -tileRange; dx < tileRange; dx++) {
     for (let dz = -tileRange; dz < tileRange; dz++) {
@@ -514,7 +516,7 @@ function GenerateField(field, width, height, depth, transparent) {
 }
 
 (async () => {
-  const parcel = await _getParcel(-4, -25);
+  const parcel = await _getParcel(-12, -11);
   const {id, hash} = parcel;
   console.log('got parcel', parcel);
   const content = await _getContent(id, hash);
@@ -565,9 +567,7 @@ function GenerateField(field, width, height, depth, transparent) {
   });
   
   const floorMesh = (() => {
-    const size = 1000*2*(1 + 1/(tileRange*2));
-    // console.log('got size', tileRange, size);
-    const geometry = new THREE.PlaneBufferGeometry(size, size)
+    const geometry = new THREE.PlaneBufferGeometry(mapSize, mapSize)
       .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI/2)));
     _getFloorTexture()
       .then(canvas => {
@@ -579,11 +579,39 @@ function GenerateField(field, width, height, depth, transparent) {
       map: texture,
     });
     const mesh = new THREE.Mesh(geometry, material);
+    // mesh.position.x = -tileVoxelWidth/2;
+    // mesh.position.z = -tileVoxelWidth/2;
     mesh.position.y = -0.1;
     mesh.frustumCulled = false;
     return mesh;
   })();
   scene.add(floorMesh);
+
+  const cubeMesh = (() => {
+    const geometry = new THREE.BoxBufferGeometry(1, 1);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xFF0000,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.frustumCulled = false;
+    return mesh;
+  })();
+  cubeMesh.position.x = 10;
+  cubeMesh.position.z = 10;
+  scene.add(cubeMesh);
+
+  const cubeMesh2 = (() => {
+    const geometry = new THREE.BoxBufferGeometry(1, 1);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xFF0000,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.frustumCulled = false;
+    return mesh;
+  })();
+  cubeMesh2.position.x = 20;
+  cubeMesh2.position.z = 20;
+  scene.add(cubeMesh2);
 
   const imageGeometry = new THREE.PlaneBufferGeometry(2, 2)
     .applyMatrix4(new THREE.Matrix4().makeScale(-1, 1, 1));
@@ -593,83 +621,63 @@ function GenerateField(field, width, height, depth, transparent) {
     imageGeometry.index.array[i] = a;
   }
 
-  console.log('got content', content, w, h, d, w*h*d);
-  const solidGeometry = GenerateField(field, w, h, d, false);
-  const transparentGeometry = GenerateField(field, w, h, d, true);
-  console.log('got solid', {solidGeometry, transparentGeometry});
-
-  const img = new Image();
-  img.crossOrigin = 'Anonymous';
-  img.src = `https://https-cdn-cryptovoxels-com.proxy.exokit.org${tileset}`;
-  img.onload = () => {
-    texture.needsUpdate = true;
-  };
-  img.onerror = err => {
-    console.warn(err.stack);
-  };
-  const texture = new THREE.Texture(img);
-
   {
-    solidGeometry.computeVertexNormals();
-    const material = new THREE.MeshPhongMaterial({
-      // color: 0xFF0000,
-      map: texture,
-      vertexColors: true,
-    });
-    const mesh = new THREE.Mesh(solidGeometry, material);
-    mesh.frustumCulled = false;
-    scene.add(mesh);
-  }
-  {
-    transparentGeometry.computeVertexNormals();
-    const material = new THREE.MeshPhongMaterial({
-      // map: texture,
-      // color: 0xFFFFFF,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.5,
-    });
-    const mesh = new THREE.Mesh(transparentGeometry, material);
-    mesh.frustumCulled = false;
-    scene.add(mesh);
-  }
-  for (const feature of features) {
-    const {type} = feature;
-    switch (type) {
-      case 'image': {
-        const {url, position, rotation, scale} = feature;
-        const u = new URL(url);
-        u.host = u.protocol.replace(/:/g, '-') + u.host.replace(/\./g, '-') + '.proxy.exokit.org';
-        // console.log('got u', u.href);
-        const geometry = imageGeometry;
-        const material = _getTextureMaterialCached(u.href);
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.frustumCulled = false;
-        mesh.position.fromArray(position);
-        mesh.position.x *= -1;
-        mesh.position.multiplyScalar(2);
-        mesh.position.x -= w - 0.5;
-        mesh.position.y += 0.5;
-        mesh.position.z += d - 0.5;
-        // console.log('pos x 1', url, position, mesh);
-        mesh.rotation.order = 'YXZ';
-        mesh.rotation.fromArray(rotation);
-        mesh.scale.fromArray(scale);
-        scene.add(mesh);
-        break;
-      }
-      case 'nft-image': {
-        const {url, position, rotation, scale} = feature;
-        const match = url.match(/https:\/\/opensea\.io\/assets\/([^\/]+)\/([0-9]+)$/);
-        if (match) {
-          const contract = match[1];
-          const token = match[2];
-          const u = `https://https-img-cryptovoxels-com.proxy.exokit.org/node/opensea?contract=${contract}&token=${token}&force_update=0`;
-          const res = await fetch(u);
-          const j = await res.json();
-          const {image_url} = j;
+    const object = new THREE.Object3D();
+    object.position.x = x1*2;
+    object.position.z = -z1*2;
+    object.rotation.order = 'YXZ';
+    object.rotation.y = Math.PI;
+
+    console.log('got content', content, w, h, d, w*h*d);
+    const solidGeometry = GenerateField(field, w, h, d, false);
+    const transparentGeometry = GenerateField(field, w, h, d, true);
+    console.log('got solid', {solidGeometry, transparentGeometry});
+
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.src = `https://https-cdn-cryptovoxels-com.proxy.exokit.org${tileset}`;
+    img.onload = () => {
+      texture.needsUpdate = true;
+    };
+    img.onerror = err => {
+      console.warn(err.stack);
+    };
+    const texture = new THREE.Texture(img);
+
+    {
+      solidGeometry.computeVertexNormals();
+      const material = new THREE.MeshPhongMaterial({
+        // color: 0xFF0000,
+        map: texture,
+        vertexColors: true,
+      });
+      const mesh = new THREE.Mesh(solidGeometry, material);
+      mesh.frustumCulled = false;
+      object.add(mesh);
+    }
+    {
+      transparentGeometry.computeVertexNormals();
+      const material = new THREE.MeshPhongMaterial({
+        // map: texture,
+        // color: 0xFFFFFF,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.5,
+      });
+      const mesh = new THREE.Mesh(transparentGeometry, material);
+      mesh.frustumCulled = false;
+      object.add(mesh);
+    }
+    for (const feature of features) {
+      const {type} = feature;
+      switch (type) {
+        case 'image': {
+          const {url, position, rotation, scale} = feature;
+          const u = new URL(url);
+          u.host = u.protocol.replace(/:/g, '-') + u.host.replace(/\./g, '-') + '.proxy.exokit.org';
+          // console.log('got u', u.href);
           const geometry = imageGeometry;
-          const material = _getTextureMaterialCached(image_url);
+          const material = _getTextureMaterialCached(u.href);
           const mesh = new THREE.Mesh(geometry, material);
           mesh.frustumCulled = false;
           mesh.position.fromArray(position);
@@ -678,40 +686,70 @@ function GenerateField(field, width, height, depth, transparent) {
           mesh.position.x -= w - 0.5;
           mesh.position.y += 0.5;
           mesh.position.z += d - 0.5;
-          // console.log('pos x 2', url, position, mesh);
+          // console.log('pos x 1', url, position, mesh);
           mesh.rotation.order = 'YXZ';
           mesh.rotation.fromArray(rotation);
           mesh.scale.fromArray(scale);
-          scene.add(mesh);
+          object.add(mesh);
+          break;
         }
-        break;
+        case 'nft-image': {
+          const {url, position, rotation, scale} = feature;
+          const match = url.match(/https:\/\/opensea\.io\/assets\/([^\/]+)\/([0-9]+)$/);
+          if (match) {
+            const contract = match[1];
+            const token = match[2];
+            const u = `https://https-img-cryptovoxels-com.proxy.exokit.org/node/opensea?contract=${contract}&token=${token}&force_update=0`;
+            const res = await fetch(u);
+            const j = await res.json();
+            const {image_url} = j;
+            const geometry = imageGeometry;
+            const material = _getTextureMaterialCached(image_url);
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.frustumCulled = false;
+            mesh.position.fromArray(position);
+            mesh.position.x *= -1;
+            mesh.position.multiplyScalar(2);
+            mesh.position.x -= w - 0.5;
+            mesh.position.y += 0.5;
+            mesh.position.z += d - 0.5;
+            // console.log('pos x 2', url, position, mesh);
+            mesh.rotation.order = 'YXZ';
+            mesh.rotation.fromArray(rotation);
+            mesh.scale.fromArray(scale);
+            object.add(mesh);
+          }
+          break;
+        }
+        case 'vox-model': {
+          const {url, position, rotation, scale, flipX} = feature;
+          const u = new URL(url);
+          u.host = u.protocol.replace(/:/g, '-') + u.host.replace(/\./g, '-') + '.proxy.exokit.org';
+          const model = await _loadVoxCached(u.href);
+          console.log('got u', u.href, model, {w, h, d, position, rotation, scale});
+          model.position.fromArray(position);
+          model.position.x *= -1;
+          model.position.multiplyScalar(2);
+          model.position.x -= w - 0.5;
+          model.position.y += 0.5;
+          model.position.z += d - 0.5;
+          model.rotation.order = 'YXZ';
+          model.rotation.fromArray(rotation);
+          // model.rotation.x *= -1;
+          model.rotation.y *= -1;
+          model.rotation.z *= -1;
+          model.scale.fromArray(scale).multiplyScalar(0.04);
+          // model.scale.z *= -1;
+          object.add(model);
+          break;
+        }
       }
-      case 'vox-model': {
-        const {url, position, rotation, scale, flipX} = feature;
-        const u = new URL(url);
-        u.host = u.protocol.replace(/:/g, '-') + u.host.replace(/\./g, '-') + '.proxy.exokit.org';
-        // console.log('got u', u.href);
-        const model = await _loadVoxCached(u.href);
-        model.position.fromArray(position);
-        model.position.x *= -1;
-        model.position.multiplyScalar(2);
-        model.position.x -= w - 0.5;
-        model.position.y += 0.5;
-        model.position.z += d - 0.5;
-        model.rotation.order = 'YXZ';
-        model.rotation.fromArray(rotation);
-        // model.rotation.x *= -1;
-        model.rotation.y *= -1;
-        model.rotation.z *= -1;
-        model.scale.fromArray(scale).multiplyScalar(0.04);
-        // model.scale.z *= -1;
-        scene.add(model);
-        break;
-      }
+      
+      scene.add(object);
     }
-  }
 
-  console.log('done');
+    console.log('done');
+  }
 })();
 </script>
 </body>
