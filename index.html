@@ -92,6 +92,37 @@ const _getTextureMaterialCached = (() => {
     return entry;
   };
 })();
+const zoom = 8;
+const tileRange = 4;
+const centerTile = 128;
+const tilePixelWidth = 256;
+const tileVoxelWidth = 24;
+const _getFloorTexture = async () => {
+  const canvas = document.createElement('canvas');
+  canvas.width = (tileRange*2)*tilePixelWidth;
+  canvas.height = (tileRange*2)*tilePixelWidth;
+  const ctx = canvas.getContext('2d');
+  for (let dx = -tileRange; dx < tileRange; dx++) {
+    for (let dz = -tileRange; dz < tileRange; dz++) {
+      const x = centerTile + dx;
+      const z = centerTile + dz;
+      const img = await new Promise((accept, reject) => {
+        const img = new Image();
+        img.src = `https://map.cryptovoxels.com/tile/?z=${zoom}&x=${x}&y=${z}`;
+        img.crossOrigin = 'Anonymous';
+        img.onload = () => {
+          accept(img);
+        };
+        img.onerror = reject;
+      });
+      ctx.drawImage(img, (dx+tileRange)*tilePixelWidth, (dz+tileRange)*tilePixelWidth);
+      // document.body.appendChild(img);
+      // console.log('append', img, img.src, (dx+tileRange)*tilePixelWidth, (dz+tileRange)*tilePixelWidth);
+    }
+  }
+  // document.body.appendChild(canvas);
+  return canvas;
+};
 
 const _loadVox = async u => {
   let o = await new Promise((accept, reject) => {
@@ -526,6 +557,31 @@ function GenerateField(field, width, height, depth, transparent) {
   orbitControls.enableMiddleZoom = false;
   // orbitControls.target.copy(camera.position).add(new THREE.Vector3(0, camera.position.y, -3).applyQuaternion(camera.quaternion));
   orbitControls.update();
+  
+  renderer.setAnimationLoop(() => {
+    orbitControls.update();
+
+    renderer.render(scene, camera);
+  });
+  
+  const floorMesh = (() => {
+    const geometry = new THREE.PlaneBufferGeometry(2000, 2000)
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI/2)));
+    _getFloorTexture()
+      .then(canvas => {
+        texture.image =  canvas;
+        texture.needsUpdate = true;
+      });
+    const texture = new THREE.Texture();
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.y = -0.1;
+    mesh.frustumCulled = false;
+    return mesh;
+  })();
+  scene.add(floorMesh);
 
   const imageGeometry = new THREE.PlaneBufferGeometry(2, 2);
 
@@ -647,12 +703,7 @@ function GenerateField(field, width, height, depth, transparent) {
     }
   }
 
-  console.log('rendering...');
-
-  renderer.setAnimationLoop(() => {
-    orbitControls.update();
-    renderer.render(scene, camera);
-  });
+  console.log('done');
 })();
 </script>
 </body>
