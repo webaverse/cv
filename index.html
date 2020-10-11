@@ -740,6 +740,7 @@ function GenerateField(field, width, height, depth, transparent) {
           model.rotation.z *= -1;
           model.scale.fromArray(scale).multiplyScalar(0.04);
           // model.scale.z *= -1;
+          model.frustumCulled = false;
           object.add(model);
           break;
         }
