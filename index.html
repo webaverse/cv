@@ -41,18 +41,9 @@ function convertDataURIToBinary(base64) {
   return array;
 }
 
-const _getParcel = async (x, z) => {
-  const nonce = 30*Math.floor(Date.now()/1e3/30);
-  
-  console.log('got nonce', `https://https-js-cryptovoxels-com.proxy.exokit.org/cache/${nonce}/parcels.json`);
-  const res = await fetch(`https://https-js-cryptovoxels-com.proxy.exokit.org/cache/${nonce}/parcels.json`);
-  const j = await res.json();
-  const {parcels} = j;
-  const parcel = parcels.find(parcel => {
-    return x >= parcel.x1 && x < parcel.x2 && z >= parcel.z1 && z < parcel.z2;
-  });
-  return parcel;
-};
+const _getParcel = (x, z, parcels) => parcels.find(parcel => {
+  return x >= parcel.x1 && x < parcel.x2 && z >= parcel.z1 && z < parcel.z2;
+});
 const _getContent = async (id, hash) => {
   const res = await fetch(`https://https-js-cryptovoxels-com.proxy.exokit.org/grid/parcels/${id}/at/${hash}`);
   const j = await res.json();
@@ -514,9 +505,18 @@ function GenerateField(field, width, height, depth, transparent) {
   geometry.setIndex(new THREE.BufferAttribute(indices.subarray(0, indexIndex), 1));
   return geometry;
 }
+const _getCoord = (x, z) => parcels.find(parcel);
 
 (async () => {
-  const parcel = await _getParcel(21, -24);
+  const parcels = await (async () => {
+    const nonce = 30*Math.floor(Date.now()/1e3/30);
+    console.log('got nonce', `https://https-js-cryptovoxels-com.proxy.exokit.org/cache/${nonce}/parcels.json`);
+    const res = await fetch(`https://https-js-cryptovoxels-com.proxy.exokit.org/cache/${nonce}/parcels.json`);
+    const j = await res.json();
+    const {parcels} = j;
+    return parcels;
+  })();
+  const parcel = await _getParcel(21, -24, parcels);
   const {id, hash} = parcel;
   console.log('got parcel', parcel);
   const content = await _getContent(id, hash);
@@ -560,12 +560,6 @@ function GenerateField(field, width, height, depth, transparent) {
   // orbitControls.target.copy(camera.position).add(new THREE.Vector3(0, camera.position.y, -3).applyQuaternion(camera.quaternion));
   orbitControls.update();
   
-  renderer.setAnimationLoop(() => {
-    orbitControls.update();
-
-    renderer.render(scene, camera);
-  });
-  
   const floorMesh = (() => {
     const geometry = new THREE.PlaneBufferGeometry(mapSize, mapSize)
       .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI/2)));
@@ -596,11 +590,11 @@ function GenerateField(field, width, height, depth, transparent) {
     mesh.frustumCulled = false;
     return mesh;
   })();
-  cubeMesh.position.x = 10;
-  cubeMesh.position.z = 10;
+  // cubeMesh.position.x = 10;
+  // cubeMesh.position.z = 10;
   scene.add(cubeMesh);
 
-  const cubeMesh2 = (() => {
+  /* const cubeMesh2 = (() => {
     const geometry = new THREE.BoxBufferGeometry(1, 1);
     const material = new THREE.MeshBasicMaterial({
       color: 0xFF0000,
@@ -611,7 +605,116 @@ function GenerateField(field, width, height, depth, transparent) {
   })();
   cubeMesh2.position.x = 20;
   cubeMesh2.position.z = 20;
-  scene.add(cubeMesh2);
+  scene.add(cubeMesh2); */
+  
+  const tileMaterial = new THREE.MeshBasicMaterial({
+    color: 0x0000FF,
+    transparent: true,
+    opacity: 0.5,
+    side: THREE.DoubleSide,
+  });
+  
+  class Tracker {
+    constructor() {
+      this.lastCoord = new THREE.Vector2(NaN, NaN);
+      this.lastScene = '';
+      this.meshes = [];
+      this.rootMesh = null;
+      this.running = false;
+      this.queue = null;
+      this.cancel = null;
+    }
+    async update(position) {
+      const currentCoord = new THREE.Vector2(Math.floor(position.x/2), Math.floor(position.z/2));
+      const {lastCoord} = this;
+      this.lastCoord = currentCoord;
+      if (!currentCoord.equals(lastCoord)) {
+        const coord = _getParcel(currentCoord.x, -currentCoord.y, parcels);
+        console.log('got coord', coord && coord.name);
+        
+        for (const mesh of this.meshes) {
+          scene.remove(mesh);
+        }
+        this.meshes.length = 0;
+        
+        if (coord) {
+          const {x1, x2, z1, z2} = coord;
+          const w = (x2 - x1)*2;
+          const d = (z2 - z1)*2;
+          const geometry = new THREE.PlaneBufferGeometry(w, d)
+            .applyMatrix4(new THREE.Matrix4().makeTranslation(w/2, d/2, 0))
+            .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI/2)));
+          const mesh = new THREE.Mesh(geometry, tileMaterial);
+          mesh.position.x = x1*2;
+          mesh.position.y = 0.1;
+          mesh.position.z = -z1*2;
+          mesh.frustumCulled = false;
+          scene.add(mesh);
+          this.meshes.push(mesh);
+        }
+        
+        let currentScene;
+        if (coord) {
+          currentScene = coord.id;
+        } else {
+          currentScene = '';
+        }
+        const {lastScene} = this;
+        this.lastScene = currentScene;
+        if (currentScene !== lastScene) {
+          this.load(currentCoord.x, -currentCoord.y, coord);
+        }
+      }
+    }
+    async load(x, z, coord) {
+      /* if (!this.running) {
+        this.running = true;
+
+        const o = _loadCoord(x, z, coord);
+        if (this.rootMesh) {
+          scene.remove(this.rootMesh);
+          this.rootMesh = null;
+        }
+        scene.add(o.object);
+        this.rootMesh = o.object;
+        // window.rootMesh = this.rootMesh;
+        this.cancel = () => {
+          o.cancel();
+        };
+        await o.promise;
+        
+        // console.log('stop running');
+        this.running = false;
+        if (this.queue) {
+          // console.log('re-queue');
+          const {x, z, coord} = this.queue;
+          this.queue = null
+          this.load(x, z, coord);
+        }
+      } else {
+        this.queue = {
+          x,
+          z,
+          coord,
+        };
+        
+        if (this.cancel) {
+          this.cancel();
+          this.cancel = null;
+        }
+      } */
+    }
+  }
+  const tracker = new Tracker();
+  
+  renderer.setAnimationLoop(() => {
+    orbitControls.update();
+    
+    cubeMesh.position.copy(orbitControls.target);
+    tracker.update(orbitControls.target);
+
+    renderer.render(scene, camera);
+  });
 
   const imageGeometry = new THREE.PlaneBufferGeometry(2, 2)
     .applyMatrix4(new THREE.Matrix4().makeScale(-1, 1, 1));
