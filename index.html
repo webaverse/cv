@@ -735,9 +735,11 @@ const _getCoord = (x, z) => parcels.find(parcel);
           }
           case 'vox-model': {
             const {url, position, rotation, scale, flipX} = feature;
-            const u = new URL(url);
-            u.host = u.protocol.replace(/:/g, '-') + u.host.replace(/\./g, '-') + '.proxy.exokit.org';
-            const model = await _loadVoxCached(u.href);
+            // const u = new URL(url);
+            // u.host = u.protocol.replace(/:/g, '-') + u.host.replace(/\./g, '-') + '.proxy.exokit.org';
+            // const model = await _loadVoxCached(u.href);
+            const u = `https://https-cdn-cryptovoxels-com.proxy.exokit.org/node/vox?url=${encodeURI(url)}`;
+            const model = await _loadVoxCached(u);
             console.log('got u', u.href, model, {w, h, d, position, rotation, scale});
             model.position.fromArray(position);
             model.position.x *= -1;
