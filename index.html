@@ -516,7 +516,7 @@ function GenerateField(field, width, height, depth, transparent) {
 }
 
 (async () => {
-  const parcel = await _getParcel(-12, -11);
+  const parcel = await _getParcel(21, -24);
   const {id, hash} = parcel;
   console.log('got parcel', parcel);
   const content = await _getContent(id, hash);
