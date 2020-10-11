@@ -585,7 +585,13 @@ function GenerateField(field, width, height, depth, transparent) {
   })();
   scene.add(floorMesh);
 
-  const imageGeometry = new THREE.PlaneBufferGeometry(2, 2);
+  const imageGeometry = new THREE.PlaneBufferGeometry(2, 2)
+    .applyMatrix4(new THREE.Matrix4().makeScale(-1, 1, 1));
+  for (let i = 0; i < imageGeometry.index.array.length; i += 3) {
+    const a = imageGeometry.index.array[i+1];
+    imageGeometry.index.array[i+1] = imageGeometry.index.array[i];
+    imageGeometry.index.array[i] = a;
+  }
 
   console.log('got content', content, w, h, d, w*h*d);
   const solidGeometry = GenerateField(field, w, h, d, false);
