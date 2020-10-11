@@ -90,32 +90,6 @@ const tilePixelWidth = 256;
 const numTiles = tileRange*2;
 const mapSize = 1000*2*(1 + 1/numTiles);
 // const tileVoxelWidth = mapSize/4/numTiles;
-const _getFloorTexture = async () => {
-  const canvas = document.createElement('canvas');
-  canvas.width = numTiles*tilePixelWidth;
-  canvas.height = numTiles*tilePixelWidth;
-  const ctx = canvas.getContext('2d');
-  for (let dx = -tileRange; dx < tileRange; dx++) {
-    for (let dz = -tileRange; dz < tileRange; dz++) {
-      const x = centerTile + dx;
-      const z = centerTile + dz;
-      const img = await new Promise((accept, reject) => {
-        const img = new Image();
-        img.src = `https://map.cryptovoxels.com/tile/?z=${zoom}&x=${x}&y=${z}`;
-        img.crossOrigin = 'Anonymous';
-        img.onload = () => {
-          accept(img);
-        };
-        img.onerror = reject;
-      });
-      ctx.drawImage(img, (dx+tileRange)*tilePixelWidth, (dz+tileRange)*tilePixelWidth);
-      // document.body.appendChild(img);
-      // console.log('append', img, img.src, (dx+tileRange)*tilePixelWidth, (dz+tileRange)*tilePixelWidth);
-    }
-  }
-  // document.body.appendChild(canvas);
-  return canvas;
-};
 
 const _loadVox = async u => {
   let o = await new Promise((accept, reject) => {
@@ -555,12 +529,35 @@ const _getCoord = (x, z) => parcels.find(parcel);
   const floorMesh = (() => {
     const geometry = new THREE.PlaneBufferGeometry(mapSize, mapSize)
       .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI/2)));
-    _getFloorTexture()
-      .then(canvas => {
-        texture.image =  canvas;
-        texture.needsUpdate = true;
-      });
-    const texture = new THREE.Texture();
+
+    const canvas = document.createElement('canvas');
+    canvas.width = numTiles*tilePixelWidth;
+    canvas.height = numTiles*tilePixelWidth;
+    (async () => {
+      const ctx = canvas.getContext('2d');
+      for (let dx = -tileRange; dx < tileRange; dx++) {
+        for (let dz = -tileRange; dz < tileRange; dz++) {
+          const x = centerTile + dx;
+          const z = centerTile + dz;
+          const img = await new Promise((accept, reject) => {
+            const img = new Image();
+            img.src = `https://map.cryptovoxels.com/tile/?z=${zoom}&x=${x}&y=${z}`;
+            img.crossOrigin = 'Anonymous';
+            img.onload = () => {
+              accept(img);
+            };
+            img.onerror = reject;
+          });
+          ctx.drawImage(img, (dx+tileRange)*tilePixelWidth, (dz+tileRange)*tilePixelWidth);
+          // document.body.appendChild(img);
+          // console.log('append', img, img.src, (dx+tileRange)*tilePixelWidth, (dz+tileRange)*tilePixelWidth);
+          texture.needsUpdate = true;
+        }
+      }
+    })().catch(err => {
+      console.warn(err);
+    });
+    const texture = new THREE.Texture(canvas);
     const material = new THREE.MeshBasicMaterial({
       map: texture,
     });
