@@ -566,7 +566,7 @@ function GenerateField(field, width, height, depth, transparent) {
   
   const floorMesh = (() => {
     const size = 1000*2*(1 + 1/(tileRange*2));
-    console.log('got size', tileRange, size);
+    // console.log('got size', tileRange, size);
     const geometry = new THREE.PlaneBufferGeometry(size, size)
       .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI/2)));
     _getFloorTexture()
