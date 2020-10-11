@@ -533,8 +533,10 @@ const _getCoord = (x, z) => parcels.find(parcel);
   const scene = new THREE.Scene();
   window.scene = scene;
 
+  const x = -3;
+  const z = -3;
   const camera = new THREE.PerspectiveCamera(90, window.innerWidth/window.innerHeight, 0.1, 300);
-  camera.position.set(0, 10, 10);
+  camera.position.set(x*2, 10, z*2 + 10);
   camera.lookAt(new THREE.Vector3());
 
   const ambientLight = new THREE.AmbientLight(0x808080);
@@ -547,6 +549,7 @@ const _getCoord = (x, z) => parcels.find(parcel);
   orbitControls.screenSpacePanning = true;
   orbitControls.enableMiddleZoom = false;
   // orbitControls.target.copy(camera.position).add(new THREE.Vector3(0, camera.position.y, -3).applyQuaternion(camera.quaternion));
+  orbitControls.target.set(x*2, 0, z*2);
   orbitControls.update();
   
   const floorMesh = (() => {
